@@ -101,5 +101,40 @@ async def analyze_pdf(file: UploadFile = File(...)):
             "error_type": type(e).__name__
         }
 
+@app.post("/api/debug-extract")
+async def debug_extract(file: UploadFile = File(...)):
+    """Simple debug endpoint that just returns extracted text."""
+    try:
+        if not file.filename or not file.filename.lower().endswith('.pdf'):
+            return {
+                "success": False,
+                "error": f"Invalid file type. Received: {file.filename}"
+            }
+        
+        pdf_bytes = await file.read()
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+        
+        text = ""
+        for page_num, page in enumerate(pdf_reader.pages):
+            page_text = page.extract_text()
+            if page_text and page_text.strip():
+                text += f"--- Page {page_num + 1} ---\n{page_text}\n"
+        
+        return {
+            "success": True,
+            "data": {
+                "extracted_text": text,
+                "character_count": len(text),
+                "page_count": len(pdf_reader.pages),
+                "note": "Raw text extraction for debugging"
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Debug extraction failed: {str(e)}"
+        }
+
 # Vercel handler
 handler = app

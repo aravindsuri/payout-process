@@ -21,7 +21,7 @@ function App() {
       const formData = new FormData()
       formData.append('file', selectedFile)
 
-      const response = await fetch('/api/analyze-pdf', {
+      const response = await fetch('https://payout-p4xh48gp1-aravindsuris-projects.vercel.app/api/analyze-pdf', {
         method: 'POST',
         body: formData,
       })
@@ -48,7 +48,7 @@ function App() {
       const formData = new FormData()
       formData.append('file', selectedFile)
 
-      const response = await fetch('/api/debug-extract', {
+      const response = await fetch('https://payout-p4xh48gp1-aravindsuris-projects.vercel.app/api/debug-extract', {
         method: 'POST',
         body: formData,
       })
