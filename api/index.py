@@ -1,183 +1,92 @@
-import os
-import io
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+import io
 import PyPDF2
 
-app = FastAPI(title="Payout Process API")
+# Create FastAPI app
+app = FastAPI()
 
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,  # Changed to False when using allow_origins=["*"]
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_credentials=False,
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Additional OPTIONS handler for preflight requests
-@app.options("/{path:path}")
-async def options_handler(path: str):
-    return JSONResponse(
-        content={},
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-            "Access-Control-Allow-Headers": "*",
-        }
-    )
-
 @app.get("/")
-def health_check():
-    return JSONResponse(
-        content={"status": "healthy", "message": "Payout Process API is running"},
-        headers={"Access-Control-Allow-Origin": "*"}
-    )
+def read_root():
+    return {"message": "API is working"}
 
-@app.get("/api/test")
-def test_simple():
-    return JSONResponse(
-        content={"status": "working", "message": "API is responding"},
-        headers={"Access-Control-Allow-Origin": "*"}
-    )
+@app.get("/api/test") 
+def test():
+    return {"status": "working", "message": "Test endpoint working"}
 
 @app.post("/api/analyze-pdf")
 async def analyze_pdf(file: UploadFile = File(...)):
-    """Simple PDF text extraction with detailed error reporting."""
     try:
-        print(f"Received file: {getattr(file, 'filename', 'No filename')}")
-        print(f"Content type: {getattr(file, 'content_type', 'No content type')}")
-        
+        # Check file type
         if not file.filename or not file.filename.lower().endswith('.pdf'):
-            error_msg = f"Invalid file type. Received: {file.filename}"
-            print(error_msg)
-            return JSONResponse(
-                content={
-                    "success": False,
-                    "error": error_msg,
-                    "error_code": "INVALID_FILE_TYPE"
-                },
-                headers={"Access-Control-Allow-Origin": "*"}
-            )
+            return {
+                "success": False,
+                "error": f"Invalid file type: {file.filename}",
+                "error_code": "INVALID_FILE_TYPE"
+            }
         
-        print("Reading file bytes...")
+        # Read file
         pdf_bytes = await file.read()
-        print(f"File size: {len(pdf_bytes)} bytes")
-        
         if len(pdf_bytes) == 0:
-            return JSONResponse(
-                content={
-                    "success": False,
-                    "error": "Empty file received",
-                    "error_code": "EMPTY_FILE"
-                },
-                headers={"Access-Control-Allow-Origin": "*"}
-            )
+            return {
+                "success": False,
+                "error": "Empty file received",
+                "error_code": "EMPTY_FILE"
+            }
         
-        print("Creating PyPDF2 reader...")
-        # Extract text using PyPDF2
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
-        print(f"PDF has {len(pdf_reader.pages)} pages")
-        
-        text = ""
-        for page_num, page in enumerate(pdf_reader.pages):
-            try:
+        # Extract text with PyPDF2
+        try:
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+            text = ""
+            
+            for page_num, page in enumerate(pdf_reader.pages):
                 page_text = page.extract_text()
                 if page_text and page_text.strip():
                     text += f"--- Page {page_num + 1} ---\n{page_text}\n"
-                print(f"Page {page_num + 1}: extracted {len(page_text) if page_text else 0} characters")
-            except Exception as page_error:
-                print(f"Error extracting page {page_num + 1}: {page_error}")
-                continue
-        
-        print(f"Total extracted text: {len(text)} characters")
-        
-        if not text.strip():
-            return JSONResponse(
-                content={
+            
+            if not text.strip():
+                return {
                     "success": False,
-                    "error": "Could not extract any readable text from PDF",
-                    "error_code": "NO_TEXT_EXTRACTED",
-                    "debug_info": {
-                        "page_count": len(pdf_reader.pages),
-                        "file_size": len(pdf_bytes)
-                    }
-                },
-                headers={"Access-Control-Allow-Origin": "*"}
-            )
-        
-        print("Successfully extracted text, returning response")
-        return JSONResponse(
-            content={
+                    "error": "Could not extract text from PDF",
+                    "error_code": "NO_TEXT_EXTRACTED"
+                }
+            
+            return {
                 "success": True,
                 "data": {
-                    "extracted_text": text[:1000] + "..." if len(text) > 1000 else text,  # Truncate for response
+                    "extracted_text": text[:1000] + "..." if len(text) > 1000 else text,
                     "character_count": len(text),
                     "page_count": len(pdf_reader.pages),
-                    "file_size": len(pdf_bytes)
+                    "file_size_bytes": len(pdf_bytes)
                 }
-            },
-            headers={"Access-Control-Allow-Origin": "*"}
-        )
-        
-    except Exception as e:
-        error_msg = f"Unexpected error: {str(e)}"
-        print(error_msg)
-        import traceback
-        print(traceback.format_exc())
-        return JSONResponse(
-            content={
+            }
+            
+        except Exception as pdf_error:
+            return {
                 "success": False,
-                "error": error_msg,
-                "error_code": "GENERAL_ERROR",
-                "error_type": type(e).__name__
-            },
-            headers={"Access-Control-Allow-Origin": "*"}
-        )
-
-@app.post("/api/debug-extract")
-async def debug_extract(file: UploadFile = File(...)):
-    """Simple debug endpoint that just returns extracted text."""
-    try:
-        if not file.filename or not file.filename.lower().endswith('.pdf'):
-            return JSONResponse(
-                content={
-                    "success": False,
-                    "error": f"Invalid file type. Received: {file.filename}"
-                },
-                headers={"Access-Control-Allow-Origin": "*"}
-            )
-        
-        pdf_bytes = await file.read()
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
-        
-        text = ""
-        for page_num, page in enumerate(pdf_reader.pages):
-            page_text = page.extract_text()
-            if page_text and page_text.strip():
-                text += f"--- Page {page_num + 1} ---\n{page_text}\n"
-        
-        return JSONResponse(
-            content={
-                "success": True,
-                "data": {
-                    "extracted_text": text,
-                    "character_count": len(text),
-                    "page_count": len(pdf_reader.pages),
-                    "note": "Raw text extraction for debugging"
-                }
-            },
-            headers={"Access-Control-Allow-Origin": "*"}
-        )
-        
+                "error": f"PDF processing error: {str(pdf_error)}",
+                "error_code": "PDF_PROCESSING_ERROR"
+            }
+            
     except Exception as e:
-        return JSONResponse(
-            content={
-                "success": False,
-                "error": f"Debug extraction failed: {str(e)}"
-            },
-            headers={"Access-Control-Allow-Origin": "*"}
-        )
+        return {
+            "success": False,
+            "error": f"Unexpected error: {str(e)}",
+            "error_code": "GENERAL_ERROR"
+        }
 
 # Vercel handler
 handler = app
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
