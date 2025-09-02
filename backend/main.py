@@ -220,6 +220,9 @@ async def debug_extract(file: UploadFile = File(...)):
         print(f"Error in debug extraction: {e}")
         raise HTTPException(status_code=500, detail=f"Error in debug extraction: {str(e)}")
 
+# Vercel handler
+handler = app
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
