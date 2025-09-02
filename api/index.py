@@ -5,11 +5,7 @@ import json
 from typing import Dict, Any
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI
 import PyPDF2
-from dotenv import load_dotenv
-
-load_dotenv()
 
 app = FastAPI(title="Payout Process API")
 
@@ -20,8 +16,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 @app.get("/")
 def health_check():
@@ -62,145 +56,69 @@ def convert_pdf_to_image(pdf_bytes: bytes) -> str:
         print(f"Error converting PDF to image: {e}")
         return ""
 
-@app.get("/api/test-env")
-def test_environment():
-    """Test endpoint to check environment variables and basic functionality."""
-    api_key = os.getenv("OPENAI_API_KEY")
-    return {
-        "status": "ok",
-        "openai_api_key_set": bool(api_key),
-        "openai_api_key_length": len(api_key) if api_key else 0,
-        "openai_api_key_prefix": api_key[:10] + "..." if api_key and len(api_key) > 10 else "None",
-        "env_vars": list(os.environ.keys())[:10],  # First 10 env vars for debugging
-        "available_modules": {
-            "PyPDF2": True,
-            "fitz": True,
-            "openai": True
-        }
-    }
+@app.get("/api/test")
+def test_simple():
+    """Simple test endpoint."""
+    return {"status": "working", "message": "API is responding"}
 
 @app.post("/api/analyze-pdf")
 async def analyze_pdf(file: UploadFile = File(...)):
+    """Simplified PDF analysis - just extract text for now."""
     try:
-        # Detailed logging for debugging
         print(f"Received file: {file.filename}")
         
-        if not file.filename.endswith('.pdf'):
+        if not file.filename or not file.filename.endswith('.pdf'):
             return {
                 "success": False,
-                "error": "Only PDF files are supported",
-                "error_type": "invalid_file_type"
+                "error": "Only PDF files are supported"
             }
         
-        # Check API key
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            return {
-                "success": False,
-                "error": "OpenAI API key not configured",
-                "error_type": "missing_api_key"
-            }
-        
+        # Read and extract text
         pdf_bytes = await file.read()
-        print(f"PDF file size: {len(pdf_bytes)} bytes")
+        print(f"PDF size: {len(pdf_bytes)} bytes")
         
-        # Extract text from PDF
-        pdf_text = extract_text_from_pdf(pdf_bytes)
-        print(f"Extracted text length: {len(pdf_text)} characters")
-        
-        if not pdf_text.strip():
-            return {
-                "success": False,
-                "error": "Could not extract text from PDF",
-                "error_type": "pdf_extraction_failed"
-            }
-        
-        # Convert to image for vision analysis
-        image_base64 = convert_pdf_to_image(pdf_bytes)
-        has_image = bool(image_base64)
-        print(f"Image conversion successful: {has_image}")
-        
-        # Simple analysis first (text-only)
+        # Extract text using PyPDF2
         try:
-            print("Making OpenAI API call...")
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {
-                        "role": "user", 
-                        "content": f"""Extract key information from this document and return it as JSON:
-
-PDF Text:
-{pdf_text[:2000]}
-
-Return a JSON object with fields like: document_type, amounts, dates, parties, etc."""
-                    }
-                ],
-                max_tokens=1500
-            )
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+            text = ""
             
-            print("OpenAI API call successful")
-            content = response.choices[0].message.content
-            print(f"Received response: {len(content)} characters")
+            for page_num, page in enumerate(pdf_reader.pages):
+                page_text = page.extract_text()
+                if page_text.strip():
+                    text += f"--- Page {page_num + 1} ---\n{page_text}\n"
             
-            # Try to parse as JSON
-            try:
-                json_start = content.find('{')
-                json_end = content.rfind('}') + 1
-                
-                if json_start != -1 and json_end > json_start:
-                    json_content = content[json_start:json_end]
-                    parsed_data = json.loads(json_content)
-                    
-                    return {
-                        "success": True,
-                        "data": parsed_data,
-                        "metadata": {
-                            "text_length": len(pdf_text),
-                            "has_image": has_image,
-                            "model_used": "gpt-3.5-turbo"
-                        }
-                    }
-                else:
-                    return {
-                        "success": True,
-                        "data": {
-                            "raw_analysis": content,
-                            "extracted_text": pdf_text[:500]
-                        },
-                        "metadata": {
-                            "note": "JSON parsing failed, returning raw analysis"
-                        }
-                    }
-                    
-            except json.JSONDecodeError as e:
-                print(f"JSON parsing error: {e}")
+            print(f"Extracted {len(text)} characters")
+            
+            if not text.strip():
                 return {
-                    "success": True,
-                    "data": {
-                        "raw_analysis": content,
-                        "extracted_text": pdf_text[:500]
-                    },
-                    "metadata": {
-                        "note": f"JSON parsing failed: {str(e)}"
-                    }
+                    "success": False,
+                    "error": "Could not extract text from PDF"
                 }
-                
+            
+            # For now, just return the extracted text
+            # Later we can add OpenAI analysis
+            return {
+                "success": True,
+                "data": {
+                    "extracted_text": text,
+                    "character_count": len(text),
+                    "page_count": len(pdf_reader.pages),
+                    "note": "Text extraction successful - OpenAI analysis temporarily disabled"
+                }
+            }
+            
         except Exception as e:
-            print(f"OpenAI API error: {e}")
+            print(f"PDF extraction error: {e}")
             return {
                 "success": False,
-                "error": f"OpenAI API error: {str(e)}",
-                "error_type": "openai_api_error",
-                "extracted_text": pdf_text[:500]
+                "error": f"PDF extraction failed: {str(e)}"
             }
             
     except Exception as e:
         print(f"General error: {e}")
         return {
             "success": False,
-            "error": f"Error processing PDF: {str(e)}",
-            "error_type": "general_error"
+            "error": f"Error: {str(e)}"
         }
 
 @app.post("/api/debug-extract")
