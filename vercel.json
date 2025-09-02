@@ -1,13 +1,8 @@
 {
-  "functions": {
-    "backend/test_main.py": {
-      "runtime": "@vercel/python@4.3.0"
-    }
-  },
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "/backend/test_main.py"
+      "destination": "/api/index"
     }
   ]
 }
