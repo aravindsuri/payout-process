@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css'
-import 'react-pdf/dist/esm/Page/TextLayer.css'
+import 'react-pdf/dist/Page/AnnotationLayer.css'
+import 'react-pdf/dist/Page/TextLayer.css'
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'
 
 interface PdfViewerProps {
   file: File
@@ -13,10 +13,12 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ file }) => {
   const [numPages, setNumPages] = useState<number>(0)
   const [pageNumber, setPageNumber] = useState<number>(1)
   const [fileUrl, setFileUrl] = useState<string>('')
+  const [error, setError] = useState<string>('')
 
   useEffect(() => {
     const url = URL.createObjectURL(file)
     setFileUrl(url)
+    setError('')
 
     return () => {
       URL.revokeObjectURL(url)
@@ -26,6 +28,12 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ file }) => {
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages)
     setPageNumber(1)
+    setError('')
+  }
+
+  const onDocumentLoadError = (error: Error) => {
+    console.error('Error loading PDF:', error)
+    setError('Failed to load PDF. Please try a different file.')
   }
 
   const goToPrevPage = () => {
@@ -51,13 +59,17 @@ const PdfViewer: React.FC<PdfViewerProps> = ({ file }) => {
       </div>
 
       <div className="pdf-document">
-        <Document
-          file={fileUrl}
-          onLoadSuccess={onDocumentLoadSuccess}
-          onLoadError={(error) => console.error('Error loading PDF:', error)}
-        >
-          <Page pageNumber={pageNumber} width={400} />
-        </Document>
+        {error ? (
+          <div className="pdf-error">{error}</div>
+        ) : (
+          <Document
+            file={fileUrl}
+            onLoadSuccess={onDocumentLoadSuccess}
+            onLoadError={onDocumentLoadError}
+          >
+            <Page pageNumber={pageNumber} width={400} />
+          </Document>
+        )}
       </div>
     </div>
   )

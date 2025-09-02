@@ -46,6 +46,32 @@
   cursor: not-allowed;
 }
 
+.button-group {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.debug-button {
+  background-color: #ffc107;
+  color: #212529;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.debug-button:hover:not(:disabled) {
+  background-color: #e0a800;
+}
+
+.debug-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
 .content-container {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -121,21 +147,129 @@
   margin: 0 auto;
 }
 
+.pdf-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  background-color: #fee;
+  border: 1px dashed #f88;
+  border-radius: 4px;
+  color: #c44;
+  font-weight: bold;
+}
+
 /* JSON Display Styles */
 .json-display {
   height: 100%;
-  overflow: auto;
   background-color: #f8f8f8;
   border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Validation Banner Styles */
+.validation-banner {
+  padding: 0.75rem;
+  border-bottom: 2px solid;
+  font-weight: bold;
+}
+
+.validation-complete {
+  background-color: #d4edda;
+  border-color: #28a745;
+  color: #155724;
+}
+
+.validation-incomplete {
+  background-color: #f8d7da;
+  border-color: #dc3545;
+  color: #721c24;
+}
+
+.validation-needs_review {
+  background-color: #fff3cd;
+  border-color: #ffc107;
+  color: #856404;
+}
+
+.validation-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.validation-icon {
+  font-size: 1.2em;
+}
+
+.validation-status {
+  font-size: 0.9em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.validation-message {
+  font-size: 0.85em;
+  font-weight: normal;
+  opacity: 0.9;
+}
+
+.validation-notes {
+  margin-top: 0.5rem;
+  font-size: 0.8em;
+  font-weight: normal;
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.json-controls {
+  display: flex;
+  background-color: #e8e8e8;
+  padding: 0.5rem;
+  border-bottom: 1px solid #ddd;
+  gap: 0.5rem;
+}
+
+.json-controls button {
+  padding: 0.25rem 0.75rem;
+  border: 1px solid #ccc;
+  background-color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.json-controls button.active {
+  background-color: #646cff;
+  color: white;
+  border-color: #646cff;
+}
+
+.json-controls button:hover:not(.active) {
+  background-color: #f5f5f5;
+}
+
+.json-content-wrapper {
+  flex: 1;
+  overflow: auto;
   padding: 1rem;
 }
 
-.json-content {
+.json-formatted {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.json-raw {
   font-family: 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.4;
   margin: 0;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .json-key {
@@ -143,24 +277,43 @@
   font-weight: bold;
 }
 
-.json-value {
-  color: #cc0000;
+.json-string {
+  color: #22863a;
+}
+
+.json-number {
+  color: #005cc5;
+}
+
+.json-boolean {
+  color: #e36209;
+}
+
+.json-null {
+  color: #6f42c1;
 }
 
 .json-bracket {
-  color: #666;
+  color: #24292e;
   font-weight: bold;
 }
 
 .json-colon {
-  color: #666;
+  color: #24292e;
+  margin: 0 0.25rem;
 }
 
 .json-comma {
-  color: #666;
+  color: #24292e;
 }
 
-.json-entry {
+.json-object-entry,
+.json-array-item {
+  margin: 2px 0;
+}
+
+.json-array,
+.json-object {
   margin: 2px 0;
 }
 

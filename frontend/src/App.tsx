@@ -40,6 +40,33 @@ function App() {
     }
   }
 
+  const handleDebugExtract = async () => {
+    if (!selectedFile) return
+
+    setIsAnalyzing(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+
+      const response = await fetch('/api/debug-extract', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to debug extract PDF')
+      }
+
+      const data = await response.json()
+      setJsonData(data)
+    } catch (error) {
+      console.error('Error in debug extraction:', error)
+      alert('Error in debug extraction. Please try again.')
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
   return (
     <div className="app">
       <header className="app-header">
@@ -55,13 +82,22 @@ function App() {
           className="file-input"
         />
         {selectedFile && (
-          <button
-            onClick={handleAnalyzePdf}
-            disabled={isAnalyzing}
-            className="analyze-button"
-          >
-            {isAnalyzing ? 'Analyzing...' : 'Analyze PDF Structure'}
-          </button>
+          <div className="button-group">
+            <button
+              onClick={handleAnalyzePdf}
+              disabled={isAnalyzing}
+              className="analyze-button"
+            >
+              {isAnalyzing ? 'Analyzing...' : 'Analyze PDF Structure'}
+            </button>
+            <button
+              onClick={handleDebugExtract}
+              disabled={isAnalyzing}
+              className="debug-button"
+            >
+              {isAnalyzing ? 'Extracting...' : 'Debug Raw Extract'}
+            </button>
+          </div>
         )}
       </div>
 
