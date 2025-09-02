@@ -23,6 +23,10 @@ app.add_middleware(
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+@app.get("/")
+def health_check():
+    return {"status": "healthy", "message": "Payout Process API is running"}
+
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     """Extract text from PDF using PyPDF2."""
     try:
@@ -51,6 +55,9 @@ def convert_pdf_to_image(pdf_bytes: bytes) -> str:
         img_data = pix.tobytes("png")
         doc.close()
         return base64.b64encode(img_data).decode('utf-8')
+    except ImportError:
+        print("PyMuPDF not available - skipping image conversion")
+        return ""
     except Exception as e:
         print(f"Error converting PDF to image: {e}")
         return ""
