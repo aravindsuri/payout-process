@@ -65,10 +65,13 @@ def convert_pdf_to_image(pdf_bytes: bytes) -> str:
 @app.get("/api/test-env")
 def test_environment():
     """Test endpoint to check environment variables and basic functionality."""
+    api_key = os.getenv("OPENAI_API_KEY")
     return {
-        "openai_api_key_set": bool(os.getenv("OPENAI_API_KEY")),
-        "openai_api_key_length": len(os.getenv("OPENAI_API_KEY", "")),
-        "python_version": os.sys.version,
+        "status": "ok",
+        "openai_api_key_set": bool(api_key),
+        "openai_api_key_length": len(api_key) if api_key else 0,
+        "openai_api_key_prefix": api_key[:10] + "..." if api_key and len(api_key) > 10 else "None",
+        "env_vars": list(os.environ.keys())[:10],  # First 10 env vars for debugging
         "available_modules": {
             "PyPDF2": True,
             "fitz": True,
