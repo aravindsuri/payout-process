@@ -1,15 +1,13 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "backend/test_main.py",
-      "use": "@vercel/python"
+  "functions": {
+    "backend/test_main.py": {
+      "runtime": "@vercel/python@4.3.0"
     }
-  ],
-  "routes": [
+  },
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "backend/test_main.py"
+      "source": "/(.*)",
+      "destination": "/backend/test_main.py"
     }
   ]
 }
