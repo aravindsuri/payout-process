@@ -1,231 +1,236 @@
-import os
-import base64
-import io
-import json
-from typing import Dict, Any
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from openai import OpenAI
+import io
+import os
+import json
 import PyPDF2
+from openai import OpenAI
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
-app = FastAPI(title="Payout Process API")
+# Create FastAPI app
+app = FastAPI()
 
+# Initialize OpenAI client
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for production
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
 @app.get("/")
-def health_check():
-    return {"status": "healthy", "message": "Payout Process API is running"}
+def read_root():
+    return {"message": "API is working"}
 
-def extract_text_from_pdf(pdf_bytes: bytes) -> str:
-    """Extract text from PDF using PyPDF2."""
-    try:
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
-        text = ""
-        
-        for page_num, page in enumerate(pdf_reader.pages):
-            page_text = page.extract_text()
-            if page_text.strip():
-                text += f"--- Page {page_num + 1} ---\n{page_text}\n"
-        
-        print(f"Extracted {len(text)} characters from PDF")
-        return text[:6000] if len(text) > 6000 else text  # Reasonable limit for OpenAI
-        
-    except Exception as e:
-        print(f"Error extracting text: {e}")
-        return ""
-
-def convert_pdf_to_image(pdf_bytes: bytes) -> str:
-    """Convert first page of PDF to base64 image for vision API."""
-    try:
-        import fitz  # PyMuPDF for image conversion
-        doc = fitz.open("pdf", pdf_bytes)
-        page = doc.load_page(0)
-        pix = page.get_pixmap()
-        img_data = pix.tobytes("png")
-        doc.close()
-        return base64.b64encode(img_data).decode('utf-8')
-    except ImportError:
-        print("PyMuPDF not available - skipping image conversion")
-        return ""
-    except Exception as e:
-        print(f"Error converting PDF to image: {e}")
-        return ""
+@app.get("/api/test") 
+def test():
+    api_key = os.getenv("OPENAI_API_KEY")
+    return {
+        "status": "working", 
+        "message": "Test endpoint working",
+        "openai_configured": bool(api_key),
+        "openai_key_length": len(api_key) if api_key else 0
+    }
 
 @app.post("/api/analyze-pdf")
 async def analyze_pdf(file: UploadFile = File(...)):
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
-    
     try:
+        # Check file type
+        if not file.filename or not file.filename.lower().endswith('.pdf'):
+            return {
+                "success": False,
+                "error": f"Invalid file type: {file.filename}",
+                "error_code": "INVALID_FILE_TYPE"
+            }
+        
+        # Read file
         pdf_bytes = await file.read()
+        if len(pdf_bytes) == 0:
+            return {
+                "success": False,
+                "error": "Empty file received",
+                "error_code": "EMPTY_FILE"
+            }
         
-        # Extract text from PDF
-        pdf_text = extract_text_from_pdf(pdf_bytes)
-        
-        # Convert to image for vision analysis
-        image_base64 = convert_pdf_to_image(pdf_bytes)
-        
-        # Prepare messages for OpenAI
-        messages_content = []
-        
-        if image_base64:
-            messages_content = [
-                {
-                    "type": "text",
-                    "text": f"""You are an expert document analyst. Extract ALL information from this PDF document and return it as a comprehensive JSON structure.
-
-EXTRACT EVERYTHING:
-- Document type and title
-- All dates (creation, due dates, effective dates, etc.)
-- All parties involved (names, addresses, contact info)
-- All monetary amounts and line items
-- All reference numbers, IDs, contract numbers
-- All signature fields and their status
-- All terms, conditions, and important details
-
-CRITICAL: Return ONLY valid JSON. No explanations or additional text.
-
-PDF Text Content:
-{pdf_text}
-
-Return as complete JSON with all extracted data."""
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{image_base64}"
-                    }
-                }
-            ]
-        else:
-            messages_content = f"""You are an expert document analyst. Extract ALL information from this PDF document and return it as a comprehensive JSON structure.
-
-EXTRACT EVERYTHING:
-- Document type and title  
-- All dates (creation, due dates, effective dates, etc.)
-- All parties involved (names, addresses, contact info)
-- All monetary amounts and line items
-- All reference numbers, IDs, contract numbers
-- All signature fields and their status
-- All terms, conditions, and important details
-
-CRITICAL: Return ONLY valid JSON. No explanations or additional text.
-
-PDF Text Content:
-{pdf_text}
-
-Return as complete JSON with all extracted data."""
-
-        # Analyze with OpenAI API
+        # Extract text with PyPDF2
         try:
-            print("Making OpenAI API call...")
-            model = "gpt-4o-mini" if image_base64 else "gpt-3.5-turbo"
-            print(f"Using model: {model}")
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+            text = ""
             
-            if image_base64:
+            for page_num, page in enumerate(pdf_reader.pages):
+                page_text = page.extract_text()
+                if page_text and page_text.strip():
+                    text += f"--- Page {page_num + 1} ---\n{page_text}\n"
+            
+            if not text.strip():
+                return {
+                    "success": False,
+                    "error": "Could not extract text from PDF",
+                    "error_code": "NO_TEXT_EXTRACTED"
+                }
+            
+            # Now analyze with OpenAI for comprehensive field extraction
+            try:
+                print("Making OpenAI API call for comprehensive analysis...")
+                
                 response = client.chat.completions.create(
-                    model=model,
+                    model="gpt-3.5-turbo",
                     messages=[
                         {
                             "role": "user",
-                            "content": messages_content
+                            "content": f"""You are an expert document analyst. Analyze this document and extract ALL information in a comprehensive JSON structure.
+
+EXTRACT EVERYTHING INCLUDING:
+- Document type and title
+- All dates (creation dates, due dates, effective dates, contract dates, etc.)
+- All parties involved (names, companies, addresses, contact information, signatures)
+- All monetary amounts, costs, fees, totals (with currency if specified)
+- All reference numbers, IDs, invoice numbers, contract numbers, account numbers
+- All line items, products, services described
+- All terms, conditions, clauses, requirements
+- Any tax information, payment terms, delivery details
+- All other structured data fields present
+
+IMPORTANT: Return ONLY valid JSON. No explanations or additional text.
+
+Document Text:
+{text}
+
+Return as comprehensive JSON with nested objects for different sections."""
                         }
                     ],
-                    max_tokens=3000
+                    max_tokens=3000,
+                    temperature=0.1
                 )
-            else:
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=[
-                        {
-                            "role": "user", 
-                            "content": messages_content
-                        }
-                    ],
-                    max_tokens=3000
-                )
-            
-            print("OpenAI API call successful")
-        except Exception as e:
-            print(f"OpenAI API call failed: {e}")
-            raise HTTPException(status_code=500, detail=f"OpenAI API error: {str(e)}")
-
-        # Process response
-        content = response.choices[0].message.content
-        print(f"Received {len(content)} characters from OpenAI")
-
-        # Try to parse as JSON
-        try:
-            # Clean the content to extract JSON
-            json_start = content.find('{')
-            json_end = content.rfind('}') + 1
-            
-            if json_start != -1 and json_end > json_start:
-                json_content = content[json_start:json_end]
-                parsed_data = json.loads(json_content)
                 
-                return {
-                    "success": True,
-                    "data": parsed_data
-                }
-            else:
-                # If no JSON structure found, return as structured text
+                print("OpenAI API call successful")
+                ai_content = response.choices[0].message.content
+                
+                # Try to parse the AI response as JSON
+                try:
+                    # Find JSON in the response
+                    json_start = ai_content.find('{')
+                    json_end = ai_content.rfind('}') + 1
+                    
+                    if json_start != -1 and json_end > json_start:
+                        json_content = ai_content[json_start:json_end]
+                        structured_data = json.loads(json_content)
+                        
+                        return {
+                            "success": True,
+                            "data": {
+                                "structured_data": structured_data,
+                                "metadata": {
+                                    "character_count": len(text),
+                                    "page_count": len(pdf_reader.pages),
+                                    "file_size_bytes": len(pdf_bytes),
+                                    "extraction_method": "OpenAI GPT-3.5-turbo",
+                                    "raw_text_preview": text[:500] + "..." if len(text) > 500 else text
+                                }
+                            }
+                        }
+                    else:
+                        # If JSON parsing fails, return the AI analysis as text
+                        return {
+                            "success": True,
+                            "data": {
+                                "ai_analysis": ai_content,
+                                "metadata": {
+                                    "character_count": len(text),
+                                    "page_count": len(pdf_reader.pages),
+                                    "file_size_bytes": len(pdf_bytes),
+                                    "extraction_method": "OpenAI GPT-3.5-turbo (text format)",
+                                    "note": "AI analysis provided as text - JSON structure not detected"
+                                }
+                            }
+                        }
+                        
+                except json.JSONDecodeError as json_error:
+                    print(f"JSON parsing error: {json_error}")
+                    return {
+                        "success": True,
+                        "data": {
+                            "ai_analysis": ai_content,
+                            "metadata": {
+                                "character_count": len(text),
+                                "page_count": len(pdf_reader.pages),
+                                "file_size_bytes": len(pdf_bytes),
+                                "extraction_method": "OpenAI GPT-3.5-turbo (text format)",
+                                "note": f"JSON parsing failed: {str(json_error)}"
+                            }
+                        }
+                    }
+                    
+            except Exception as openai_error:
+                print(f"OpenAI API error: {openai_error}")
+                # Fallback to basic text extraction if OpenAI fails
                 return {
                     "success": True,
                     "data": {
-                        "document_analysis": content,
-                        "extracted_text": pdf_text[:500],
-                        "note": "AI analysis provided as text - JSON structure not detected"
+                        "extracted_text": text[:1000] + "..." if len(text) > 1000 else text,
+                        "character_count": len(text),
+                        "page_count": len(pdf_reader.pages),
+                        "file_size_bytes": len(pdf_bytes),
+                        "note": f"OpenAI analysis failed: {str(openai_error)}. Showing basic text extraction.",
+                        "openai_error": str(openai_error)
                     }
                 }
-                
-        except json.JSONDecodeError as e:
-            print(f"JSON parsing error: {e}")
+            
+        except Exception as pdf_error:
             return {
-                "success": True,
-                "data": {
-                    "document_analysis": content,
-                    "extracted_text": pdf_text[:500],
-                    "note": "AI analysis provided - JSON parsing failed"
-                }
+                "success": False,
+                "error": f"PDF processing error: {str(pdf_error)}",
+                "error_code": "PDF_PROCESSING_ERROR"
             }
             
     except Exception as e:
-        print(f"Error processing PDF: {e}")
-        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+        return {
+            "success": False,
+            "error": f"Unexpected error: {str(e)}",
+            "error_code": "GENERAL_ERROR"
+        }
 
 @app.post("/api/debug-extract")
 async def debug_extract(file: UploadFile = File(...)):
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
-    
+    """Simple debug endpoint that returns raw extracted text."""
     try:
+        if not file.filename or not file.filename.lower().endswith('.pdf'):
+            return {
+                "success": False,
+                "error": f"Invalid file type: {file.filename}"
+            }
+        
         pdf_bytes = await file.read()
-        pdf_text = extract_text_from_pdf(pdf_bytes)
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+        
+        text = ""
+        for page_num, page in enumerate(pdf_reader.pages):
+            page_text = page.extract_text()
+            if page_text and page_text.strip():
+                text += f"--- Page {page_num + 1} ---\n{page_text}\n"
         
         return {
             "success": True,
             "data": {
-                "extracted_text": pdf_text,
-                "character_count": len(pdf_text),
+                "extracted_text": text,
+                "character_count": len(text),
+                "page_count": len(pdf_reader.pages),
                 "note": "Raw text extraction for debugging"
             }
         }
         
     except Exception as e:
-        print(f"Error in debug extraction: {e}")
-        raise HTTPException(status_code=500, detail=f"Error in debug extraction: {str(e)}")
+        return {
+            "success": False,
+            "error": f"Debug extraction failed: {str(e)}"
+        }
 
 # Vercel handler
 handler = app
